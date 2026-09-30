@@ -7,6 +7,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.api.health import router as health_router
+from app.api.imports import router as import_router
+from app.api.conversations import router as conversations_router
+
 
 
 @asynccontextmanager
@@ -98,6 +101,8 @@ def create_app() -> FastAPI:
         }
 
     app.include_router(health_router)
+    app.include_router(import_router)
+    app.include_router(conversations_router)
 
     return app
 

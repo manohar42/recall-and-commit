@@ -16,7 +16,7 @@ DATABASE_URL = f"sqlite:///{DATABASE_PATH.as_posix()}"
 engine = create_engine(DATABASE_URL,
                        connect_args={"check_same_thread": False},)
 
-sessionLocal = sessionmaker(
+SessionLocal = sessionmaker(
     bind=engine,
     autoflush=False,
     autocommit = False,
@@ -28,12 +28,11 @@ class Base(DeclarativeBase):
     """Base class for all future SQLAlchemy models."""
     pass
 
-def get_db() -> Generator[Session, None, None]:
-    db = sessionLocal()
-
+def get_db():
+    db = SessionLocal()
     try:
         yield db
-    except:
+    finally:
         db.close()
 
 def check_database_connection() -> bool:
