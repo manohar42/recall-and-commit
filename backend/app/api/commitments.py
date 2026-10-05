@@ -7,7 +7,21 @@ from app.schemas.commitments import (
 )
 from app.services import commitments as svc
 from app.storage import get_db
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy.orm import Session
 
+from app.schemas.commitments import (
+    CommitmentOut,
+    CommitmentPatch,
+    ReviewSummary,
+)
+from app.services.commitment_review import (
+    get_review_summary,
+    list_commitments,
+    patch_commitment,
+)
+
+from app.storage import get_db
 router = APIRouter(prefix="/api/commitments", tags=["Commitments"])
 
 
@@ -50,15 +64,15 @@ def reject(candidate_id: int, db: Session = Depends(get_db)):
         _raise(exc)
 
 
-@router.get("", response_model=list[CommitmentOut])
-def list_ledger(
-    status: str | None = Query(default=None, pattern="^(open|done|cancelled)$"),
-    db: Session = Depends(get_db),
-):
-    q = db.query(Commitment)
-    if status:
-        q = q.filter(Commitment.status == status)
-    return q.order_by(Commitment.due_at.is_(None), Commitment.due_at, Commitment.id).all()
+# @router.get("", response_model=list[CommitmentOut])
+# def list_ledger(
+#     status: str | None = Query(default=None, pattern="^(open|done|cancelled)$"),
+#     db: Session = Depends(get_db),
+# ):
+#     q = db.query(Commitment)
+#     if status:
+#         q = q.filter(Commitment.status == status)
+#     return q.order_by(Commitment.due_at.is_(None), Commitment.due_at, Commitment.id).all()
 
 
 @router.patch("/{commitment_id}", response_model=CommitmentOut)
@@ -67,3 +81,47 @@ def update(commitment_id: int, body: CommitmentUpdate, db: Session = Depends(get
         return svc.update_commitment_status(db, commitment_id, body.status)
     except svc.ReviewError as exc:
         _raise(exc)
+
+
+@router.get("/review", response_model=ReviewSummary)
+def review_summary(
+    soon_days: int = Query(default=7, ge=1, le=30),
+    completed_days: int = Query(default=7, ge=1, le=90),
+    db: Session = Depends(get_db),
+):
+    return get_review_summary(db, soon_days, completed_days)
+
+
+@router.get("", response_model=list[CommitmentOut])
+def list_ledger(
+    status: str | None = Query(default=None, pattern="^(open|done|cancelled)$"),
+    due: str | None = Query(default=None, pattern="^(overdue|soon|undated|later)$"),
+    limit: int = Query(default=100, ge=1, le=500),
+    db: Session = Depends(get_db),
+):
+    try:
+        return list_commitments(db, status=status, due=due, limit=limit)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.patch("/{commitment_id}", response_model=CommitmentOut)
+def update_commitment(
+    commitment_id: int,
+    body: CommitmentPatch,
+    db: Session = Depends(get_db),
+):
+    changes = body.model_dump(exclude_unset=True)
+
+    if not changes:
+        raise HTTPException(status_code=422, detail="Provide at least one field to update")
+
+    try:
+        result = patch_commitment(db, commitment_id, changes)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    if result is None:
+        raise HTTPException(status_code=404, detail="Commitment not found")
+
+    return result
