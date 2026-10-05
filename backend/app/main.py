@@ -11,6 +11,8 @@ from app.api.imports import router as import_router
 from app.api.conversations import router as conversations_router
 from app.api.recall import router as recall_router
 
+from app.api.commitments import router as commitments_router
+
 
 
 @asynccontextmanager
@@ -105,6 +107,7 @@ def create_app() -> FastAPI:
     app.include_router(import_router)
     app.include_router(conversations_router)
     app.include_router(recall_router)
+    app.include_router(commitments_router)
 
 
     return app

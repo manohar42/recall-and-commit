@@ -6,6 +6,7 @@ from sqlalchemy import pool
 from alembic import context
 import sys
 from pathlib import Path
+import app.models_commitments 
 
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 
@@ -79,6 +80,11 @@ def run_migrations_online() -> None:
 
         with context.begin_transaction():
             context.run_migrations()
+
+def include_object(obj, name, type_, reflected, compare_to):
+    if type_ == "table" and name.startswith("recall_fts"):
+        return False
+    return True
 
 
 if context.is_offline_mode():
