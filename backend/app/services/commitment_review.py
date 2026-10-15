@@ -4,7 +4,8 @@ from sqlalchemy.orm import Session
 
 from app.models import Conversation, Utterance
 from app.models_commitments import Commitment
-
+from app.schemas.commitments import CommitmentBase, CommitmentOut, SourceOut
+from app.models import Utterance   # adjust to your model import path
 
 def _as_utc(value: datetime) -> datetime:
     """Treat naive database datetimes as UTC; normalize aware ones to UTC."""
@@ -148,3 +149,51 @@ def patch_commitment(db: Session, commitment_id: int, changes: dict) -> dict | N
         datetime.now(timezone.utc),
         7,
     )
+
+
+
+
+
+
+def load_source(db, item) -> SourceOut | None:
+    utterance_id = getattr(item, "source_utterance_id", None)
+    if utterance_id is None:
+        return None
+    utt = db.get(Utterance, utterance_id)
+    if utt is None:
+        return None
+    return SourceOut(
+        conversation_id=utt.conversation_id,
+        utterance_id=utt.id,
+        sequence=utt.sequence,
+        quote=utt.text,
+    )
+
+
+def compute_due_group(item, now, soon_days: int = 7) -> str:
+    if item.status == "done":
+        return "done"
+    if item.status == "cancelled":
+        return "cancelled"
+    if item.due_at is None:
+        return "undated"
+    if item.due_at < now:
+        return "overdue"
+    if (item.due_at - now).days <= soon_days:
+        return "soon"
+    return "later"
+
+
+def serialize_commitment(db, item, now, soon_days: int = 7) -> CommitmentOut:
+    base = CommitmentBase.model_validate(item)
+    return CommitmentOut(
+        **base.model_dump(),
+        source=load_source(db, item),
+        due_group=compute_due_group(item, now, soon_days),
+    )
+
+def serialize_commitment(db, item, now, soon_days=7) -> CommitmentOut:
+    source = load_source(db, item)          # None if evidence is missing
+    group = compute_due_group(item, now, soon_days)
+    base = CommitmentBase.model_validate(item)
+    return CommitmentOut(**base.model_dump(), source=source, due_group=group)

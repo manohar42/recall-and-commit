@@ -9,7 +9,11 @@ from app.services import commitments as svc
 from app.storage import get_db
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
+from datetime import datetime, timezone
 
+from app.schemas.commitments import CommitmentOut, CommitmentPatch
+from app.services.commitment_review import serialize_commitment
+from app.services.commitments import approve_candidate, update_commitment
 from app.schemas.commitments import (
     CommitmentOut,
     CommitmentPatch,
@@ -19,6 +23,7 @@ from app.services.commitment_review import (
     get_review_summary,
     list_commitments,
     patch_commitment,
+    serialize_commitment,
 )
 
 from app.storage import get_db
@@ -47,13 +52,13 @@ def list_candidates(
     )
 
 
-@router.post("/candidates/{candidate_id}/approve", response_model=CommitmentOut)
-def approve(candidate_id: int, body: ApproveRequest | None = None, db: Session = Depends(get_db)):
-    edits = body.model_dump() if body else {}
-    try:
-        return svc.approve_candidate(db, candidate_id, edits)
-    except svc.ReviewError as exc:
-        _raise(exc)
+# @router.post("/candidates/{candidate_id}/approve", response_model=CommitmentOut)
+# def approve(candidate_id: int, body: ApproveRequest | None = None, db: Session = Depends(get_db)):
+#     edits = body.model_dump() if body else {}
+#     try:
+#         return svc.approve_candidate(db, candidate_id, edits)
+#     except svc.ReviewError as exc:
+#         _raise(exc)
 
 
 @router.post("/candidates/{candidate_id}/reject", response_model=CandidateOut)
@@ -75,12 +80,25 @@ def reject(candidate_id: int, db: Session = Depends(get_db)):
 #     return q.order_by(Commitment.due_at.is_(None), Commitment.due_at, Commitment.id).all()
 
 
+# @router.patch("/{commitment_id}", response_model=CommitmentOut)
+# def update(commitment_id: int, body: CommitmentUpdate, db: Session = Depends(get_db)):
+#     try:
+#         return svc.update_commitment_status(db, commitment_id, body.status)
+#     except svc.ReviewError as exc:
+#         _raise(exc)
+
+def utcnow() -> datetime:
+    return datetime.now(timezone.utc)
+
+@router.post("/candidates/{candidate_id}/approve", response_model=CommitmentOut)
+def approve(candidate_id: int, db: Session = Depends(get_db)):
+    item = approve_candidate(db, candidate_id)
+    return serialize_commitment(db, item, now=utcnow())
+
 @router.patch("/{commitment_id}", response_model=CommitmentOut)
-def update(commitment_id: int, body: CommitmentUpdate, db: Session = Depends(get_db)):
-    try:
-        return svc.update_commitment_status(db, commitment_id, body.status)
-    except svc.ReviewError as exc:
-        _raise(exc)
+def patch(commitment_id: int, body: CommitmentPatch, db: Session = Depends(get_db)):
+    item = update_commitment(db, commitment_id, body)
+    return serialize_commitment(db, item, now=utcnow())
 
 
 @router.get("/review", response_model=ReviewSummary)

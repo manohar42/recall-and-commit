@@ -109,3 +109,13 @@ def update_commitment_status(db: Session, commitment_id: int, status: str) -> Co
     db.commit()
     db.refresh(item)
     return item
+
+def update_commitment(db: Session, commitment_id: int, status: str) -> Commitment:
+    item = db.get(Commitment, commitment_id)
+    if item is None:
+        raise ReviewError("Commitment not found", 404)
+    item.status = status
+    item.completed_at = datetime.now(timezone.utc) if status == "done" else None
+    db.commit()
+    db.refresh(item)
+    return item
