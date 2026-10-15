@@ -1,32 +1,17 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
-from app.models_commitments import Commitment, CommitmentCandidate
+from app.models_commitments import CommitmentCandidate
 from app.schemas.commitments import (
-    ApproveRequest, CandidateOut, CommitmentOut, CommitmentUpdate, DetectSummary,
+    ApproveRequest, CandidateOut, CommitmentOut, CommitmentPatch,
+    DetectSummary, ReviewSummary,
 )
 from app.services import commitments as svc
-from app.storage import get_db
-from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session
-from datetime import datetime, timezone
-
-from app.schemas.commitments import CommitmentOut, CommitmentPatch
-from app.services.commitment_review import serialize_commitment
-from app.services.commitments import approve_candidate, update_commitment
-from app.schemas.commitments import (
-    CommitmentOut,
-    CommitmentPatch,
-    ReviewSummary,
-)
 from app.services.commitment_review import (
-    get_review_summary,
-    list_commitments,
-    patch_commitment,
-    serialize_commitment,
+    get_review_summary, list_commitments, patch_commitment, serialize_commitment,
 )
-
 from app.storage import get_db
+
 router = APIRouter(prefix="/api/commitments", tags=["Commitments"])
 
 
@@ -87,18 +72,21 @@ def reject(candidate_id: int, db: Session = Depends(get_db)):
 #     except svc.ReviewError as exc:
 #         _raise(exc)
 
-def utcnow() -> datetime:
-    return datetime.now(timezone.utc)
+
 
 @router.post("/candidates/{candidate_id}/approve", response_model=CommitmentOut)
-def approve(candidate_id: int, db: Session = Depends(get_db)):
-    item = approve_candidate(db, candidate_id)
-    return serialize_commitment(db, item, now=utcnow())
+def approve(candidate_id: int, body: ApproveRequest | None = None, db: Session = Depends(get_db)):
+    edits = body.model_dump() if body else {}
+    try:
+        item = svc.approve_candidate(db, candidate_id, edits)
+    except svc.ReviewError as exc:
+        _raise(exc)
+    return serialize_commitment(db, item)
 
-@router.patch("/{commitment_id}", response_model=CommitmentOut)
-def patch(commitment_id: int, body: CommitmentPatch, db: Session = Depends(get_db)):
-    item = update_commitment(db, commitment_id, body)
-    return serialize_commitment(db, item, now=utcnow())
+# @router.patch("/{commitment_id}", response_model=CommitmentOut)
+# def patch(commitment_id: int, body: CommitmentPatch, db: Session = Depends(get_db)):
+#     item = update_commitment(db, commitment_id, body)
+#     return serialize_commitment(db, item, now=utcnow())
 
 
 @router.get("/review", response_model=ReviewSummary)
@@ -142,4 +130,21 @@ def update_commitment(
     if result is None:
         raise HTTPException(status_code=404, detail="Commitment not found")
 
+    return result
+
+@router.patch("/{commitment_id}", response_model=CommitmentOut)
+def patch_commitment_route(
+    commitment_id: int,
+    body: CommitmentPatch,
+    db: Session = Depends(get_db),
+):
+    changes = body.model_dump(exclude_unset=True)
+    if not changes:
+        raise HTTPException(status_code=422, detail="Provide at least one field to update")
+    try:
+        result = patch_commitment(db, commitment_id, changes)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    if result is None:
+        raise HTTPException(status_code=404, detail="Commitment not found")
     return result

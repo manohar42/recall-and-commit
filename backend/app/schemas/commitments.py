@@ -34,7 +34,21 @@ class SourceOut(BaseModel):
     sequence: int
     speaker: str| None
     text : str
-
+    
+class CommitmentOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    candidate_id: int
+    conversation_id: int
+    utterance_id: int
+    action_text: str
+    counterparty: str | None
+    due_text: str | None
+    due_at: datetime | None
+    status: str
+    completed_at: datetime | None
+    source: SourceOut | None
+    due_group: Literal["overdue","soon","undated","later","done","cancelled"]
 # class CommitmentOut(BaseModel):
 #     model_config = ConfigDict(from_attributes=True)
 
@@ -51,24 +65,24 @@ class SourceOut(BaseModel):
 #     source : SourceOut | None
 #     due_group : Literal["overdue","soon","undated","later","done","cancelled"]
 
-class CommitmentBase(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-    id: int
-    action_text: str
-    counterparty: str | None = None
-    due_at: datetime | None = None
-    status: str
-    completed_at: datetime | None = None
+# class CommitmentBase(BaseModel):
+#     model_config = ConfigDict(from_attributes=True)
+#     id: int
+#     action_text: str
+#     counterparty: str | None = None
+#     due_at: datetime | None = None
+#     status: str
+#     completed_at: datetime | None = None
 
-class SourceOut(BaseModel):
-    conversation_id: int
-    utterance_id: int
-    sequence: int
-    quote: str
+# class SourceOut(BaseModel):
+#     conversation_id: int
+#     utterance_id: int
+#     sequence: int
+#     quote: str
 
-class CommitmentOut(CommitmentBase):
-    source: SourceOut | None
-    due_group: str
+# class CommitmentOut(CommitmentBase):
+#     source: SourceOut | None
+#     due_group: str
 
 class CommitmentUpdate(BaseModel):
     status: Literal["open", "done", "cancelled"]
